@@ -13,7 +13,14 @@ class Trainer:
         self.val_loader = val_loader
         self.device = config.DEVICE
         
-        self.criterion = nn.CrossEntropyLoss()
+        # Balanced Class Weights (Approximate inverse frequency)
+        # N: 1.0 (Majority)
+        # S: ~30.0 
+        # V: ~15.0
+        # F: ~100.0 (Minority)
+        # Q: ~15.0
+        class_weights = torch.tensor([1.0, 30.0, 15.0, 100.0, 15.0]).to(self.device)
+        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
         self.optimizer = optim.AdamW(
             self.model.parameters(), 
             lr=config.LEARNING_RATE, 
@@ -41,6 +48,10 @@ class Trainer:
             outputs, _ = self.model(signals)
             loss = self.criterion(outputs, labels)
             loss.backward()
+            
+            # Gradient Clipping to prevent explosion (common in LNNs)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            
             self.optimizer.step()
             
             running_loss += loss.item()

@@ -18,7 +18,7 @@ class Config:
     # Model Hyperparameters
     HIDDEN_DIM = 48
     NUM_LNN_LAYERS = 2
-    ODE_STEPS = 3
+    ODE_STEPS = 6
     NUM_ATTENTION_HEADS = 4
     TAU_MIN = 0.1
     TAU_MAX = 10.0
@@ -28,7 +28,7 @@ class Config:
     BATCH_SIZE = 64
     LEARNING_RATE = 15e-4
     WEIGHT_DECAY = 1e-4
-    NUM_EPOCHS = 50  # Arbitrary default, adjustable
+    NUM_EPOCHS = 1  # Arbitrary default, adjustable
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     # Clinical Thresholds (for Decision Logic)
