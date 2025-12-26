@@ -7,6 +7,7 @@ class Config:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     DATA_DIR = os.path.join(BASE_DIR, '..', 'data')
     MODELS_DIR = os.path.join(BASE_DIR, '..', 'models_saved')
+    LOGS_DIR = os.path.join(BASE_DIR, '..', 'logs')
     
     # Data Processing
     SAMPLING_RATE = 360
@@ -28,7 +29,7 @@ class Config:
     BATCH_SIZE = 64
     LEARNING_RATE = 15e-4
     WEIGHT_DECAY = 1e-4
-    NUM_EPOCHS = 1  # Arbitrary default, adjustable
+    NUM_EPOCHS = 30  # Increased from 1 to 30 for better learning
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     # Clinical Thresholds (for Decision Logic)
@@ -39,3 +40,4 @@ class Config:
     def ensure_dirs():
         os.makedirs(Config.DATA_DIR, exist_ok=True)
         os.makedirs(Config.MODELS_DIR, exist_ok=True)
+        os.makedirs(Config.LOGS_DIR, exist_ok=True)
