@@ -124,6 +124,7 @@ if 'initialized' not in st.session_state:
     st.session_state.ecg_buffer = []
     st.session_state.full_session_buffer = [] # Store all samples for download
     st.session_state.anomalies = [] # Store abnormal segments
+    st.session_state.anomaly_indices = [] # Store indices for marking on full graph
     st.toast("✓ AI Model Ready", icon='✅')
 
 # --- Sidebar Controls ---
@@ -148,6 +149,7 @@ with st.sidebar:
         st.session_state.ecg_buffer = []
         st.session_state.full_session_buffer = []
         st.session_state.anomalies = []
+        st.session_state.anomaly_indices = []
         
     if col_btn2.button("STOP", width='stretch'):
         st.session_state.running = False
@@ -169,23 +171,64 @@ with st.sidebar:
             counts = pd.Series([a['type'] for a in st.session_state.anomalies]).value_counts().to_dict()
             summary_str = ", ".join([f"{k}: {v}" for k, v in counts.items()]) or "No abnormalities detected"
             
-            # Full Signal Plot for Report
+            # Create Time Index (seconds)
+            fs = 360
+            time_idx = np.arange(len(st.session_state.full_session_buffer)) / fs
+            
+            # Full Signal Plot with Critical Point Markers
             fig_full = go.Figure()
-            fig_full.add_trace(go.Scatter(y=st.session_state.full_session_buffer, line=dict(color='#2c3e50')))
-            fig_full.update_layout(title="Full Continuous ECG Record", height=300)
+            # Main Signal
+            fig_full.add_trace(go.Scatter(
+                x=time_idx, 
+                y=st.session_state.full_session_buffer, 
+                line=dict(color='#2c3e50', width=1),
+                name='ECG Lead MLII'
+            ))
+            
+            # Add Critical Points (Markers)
+            if st.session_state.anomaly_indices:
+                anom_times = [idx / fs for idx in st.session_state.anomaly_indices]
+                anom_values = [st.session_state.full_session_buffer[idx] for idx in st.session_state.anomaly_indices]
+                fig_full.add_trace(go.Scatter(
+                    x=anom_times,
+                    y=anom_values,
+                    mode='markers',
+                    marker=dict(color='#e74c3c', size=10, symbol='x'),
+                    name='CRITICAL POINT'
+                ))
+
+            fig_full.update_layout(
+                title="Full Continuous ECG Record with Critical Markers",
+                xaxis_title="Time (seconds)",
+                yaxis_title="Amplitude (mV)",
+                height=400,
+                xaxis=dict(showgrid=True, gridcolor='#ecf0f1'),
+                yaxis=dict(showgrid=True, gridcolor='#ecf0f1'),
+                template="plotly_white"
+            )
             full_plot_html = fig_full.to_html(include_plotlyjs='cdn', full_html=False)
             
-            # Anomaly Grid for Report
+            # Anomaly Grid for Report (Enhanced Grid)
             anom_html = ""
-            for a in st.session_state.anomalies:
+            for i, a in enumerate(st.session_state.anomalies):
                 fig_a = go.Figure()
-                fig_a.add_trace(go.Scatter(y=a['data'], line=dict(color='#e74c3c')))
-                fig_a.update_layout(height=150, margin=dict(l=0,r=0,t=0,b=0), xaxis_visible=False, yaxis_visible=False)
+                fig_a.add_trace(go.Scatter(y=a['data'], line=dict(color='#e74c3c', width=2)))
+                fig_a.update_layout(
+                    height=200, 
+                    margin=dict(l=0,r=0,t=20,b=0), 
+                    xaxis_visible=False, 
+                    yaxis_visible=True,
+                    title=dict(text=f"Event #{i+1}: {a['type']}", font=dict(size=12))
+                )
                 plot_a = fig_a.to_html(include_plotlyjs='cdn', full_html=False)
                 anom_html += f"""
-                <div style='border: 1px solid #ddd; padding: 10px; margin: 5px; border-radius: 5px;'>
-                    <b>Type: {a['type']}</b> | {a['time']}<br>
+                <div style='border: 2px solid #e74c3c; padding: 15px; margin: 10px; border-radius: 8px; background: #fffcfc;'>
+                    <div style='display:flex; justify-content:between; font-size: 12px; margin-bottom:10px;'>
+                        <b style='color:#c0392b;'>CRITICAL POINT #{i+1}</b>
+                        <span style='margin-left:auto;'>Time Offset: {a['offset_sec']:.2f}s | Real Time: {a['time']}</span>
+                    </div>
                     {plot_a}
+                    <div style='font-size: 11px; margin-top:5px; color:#555;'>Classification: {a['type']} | Confidence: {a['conf']:.2%}</div>
                 </div>
                 """
             
@@ -194,25 +237,34 @@ with st.sidebar:
                 <head>
                     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
                     <style>
-                        body {{ font-family: 'Inter', sans-serif; padding: 40px; color: #333; }}
-                        .header {{ border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px; }}
-                        .grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }}
-                        .footer {{ margin-top: 50px; font-size: 10px; color: #7f8c8d; text-align: center; }}
+                        body {{ font-family: 'Inter', sans-serif; padding: 40px; color: #333; background: #f9fbfd; }}
+                        .header {{ background: #fff; border: 1px solid #dce4ec; border-radius: 10px; padding: 25px; margin-bottom: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
+                        h1 {{ color: #2c3e50; margin: 0; font-size: 24px; }}
+                        .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }}
+                        .section-title {{ border-left: 5px solid #e74c3c; padding-left: 15px; margin: 30px 0 15px 0; color: #2c3e50; }}
+                        .footer {{ margin-top: 50px; font-size: 10px; color: #7f8c8d; text-align: center; border-top: 1px solid #eee; padding-top: 20px; }}
                     </style>
                 </head>
                 <body>
                     <div class="header">
-                        <h1>ECG CLINICAL ANALYSIS REPORT</h1>
-                        <p>Patient Record: <b>#{selected_record}</b> | Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+                        <h1>CARDIOLOGY ANALYSIS REPORT</h1>
+                        <p style="color:#7f8c8d;">Patient Record: <b>#{selected_record}</b> | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+                        <hr style="border:0; border-top:1px solid #eee;">
+                        <p><b>Executive Summary:</b> {len(st.session_state.anomalies)} critical events identified. Types observed: {summary_str}.</p>
                     </div>
-                    <div>
-                        <h3>Executive Summary</h3>
-                        <p>Total Abnormalities: {len(st.session_state.anomalies)} ({summary_str})</p>
+                    
+                    <h3 class="section-title">Continuous Monitoring Record (MLII)</h3>
+                    <div style="background:#fff; padding:15px; border-radius:10px; border:1px solid #eee;">
+                        {full_plot_html}
                     </div>
-                    {full_plot_html}
-                    <h3>Detected Anomalies Grid</h3>
+
+                    <h3 class="section-title">Critical Point Grid (Detailed Events)</h3>
                     <div class="grid">{anom_html}</div>
-                    <div class="footer">Generated by LA-NN (Liquid Attention Neural Network) Clinical Engine</div>
+                    
+                    <div class="footer">
+                        This report was generated by the LA-NN Clinical Engine v1.0. 
+                        Clinical interpretation should be performed by a qualified healthcare professional.
+                    </div>
                 </body>
             </html>
             """
@@ -316,12 +368,16 @@ if st.session_state.running:
                         trace_color = "#ff3e3e" # Red for abnormality
                         # "Push" for analysis: Capture segment
                         anomaly_segment = engine.signal[max(0, i-180) : min(len(engine.signal), i+180)]
+                        total_samples_so_far = len(st.session_state.full_session_buffer)
                         st.session_state.anomalies.append({
                             "time": datetime.now().strftime("%H:%M:%S"),
+                            "offset_sec": total_samples_so_far / FS,
                             "type": prediction_result['prediction'],
                             "conf": prediction_result['confidence'],
                             "data": anomaly_segment.tolist()
                         })
+                        st.session_state.anomaly_indices.append(total_samples_so_far)
+                        
                         # Keep only last 50 anomalies to capture a full record's worth of data
                         if len(st.session_state.anomalies) > 50:
                             st.session_state.anomalies.pop(0)
