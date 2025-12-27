@@ -8,6 +8,8 @@ import sys
 import torch
 import torch.nn.functional as F
 import asyncio
+import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime
 
 # Add src to path
@@ -163,7 +165,6 @@ with st.sidebar:
         
         # Professional HTML Report Generation
         def generate_html_report():
-            import plotly.graph_objects as go
             import base64
             from io import BytesIO
             
@@ -237,47 +238,95 @@ with st.sidebar:
                 <head>
                     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
                     <style>
-                        body {{ font-family: 'Inter', sans-serif; padding: 40px; color: #333; background: #f9fbfd; }}
-                        .header {{ background: #fff; border: 1px solid #dce4ec; border-radius: 10px; padding: 25px; margin-bottom: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
-                        h1 {{ color: #2c3e50; margin: 0; font-size: 24px; }}
-                        .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }}
-                        .section-title {{ border-left: 5px solid #e74c3c; padding-left: 15px; margin: 30px 0 15px 0; color: #2c3e50; }}
-                        .footer {{ margin-top: 50px; font-size: 10px; color: #7f8c8d; text-align: center; border-top: 1px solid #eee; padding-top: 20px; }}
+                        body {{ font-family: 'Inter', sans-serif; padding: 40px; color: #333; background: #f4f7f9; }}
+                        .header {{ background: #fff; border: 1px solid #dce4ec; border-radius: 10px; padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }}
+                        h1 {{ color: #1a2a3a; margin: 0; font-size: 28px; letter-spacing: 1px; }}
+                        
+                        /* ECG Paper Background Effect */
+                        .ecg-paper {{
+                            background-color: #fff;
+                            background-image: 
+                                linear-gradient(to right, rgba(231, 76, 60, 0.1) 1px, transparent 1px),
+                                linear-gradient(to bottom, rgba(231, 76, 60, 0.1) 1px, transparent 1px),
+                                linear-gradient(to right, rgba(231, 76, 60, 0.3) 1px, transparent 1px),
+                                linear-gradient(to bottom, rgba(231, 76, 60, 0.3) 1px, transparent 1px);
+                            background-size: 5px 5px, 5px 5px, 25px 25px, 25px 25px;
+                            border: 1px solid #e74c3c;
+                            border-radius: 5px;
+                            padding: 10px;
+                            position: relative;
+                        }}
+                        
+                        .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }}
+                        .event-card {{ background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #eee; }}
+                        .event-header {{ background: #e74c3c; color: #fff; padding: 8px 15px; font-weight: bold; display: flex; justify-content: space-between; font-size: 13px; }}
+                        .section-title {{ border-bottom: 3px solid #2c3e50; padding-bottom: 5px; margin: 40px 0 20px 0; color: #2c3e50; text-transform: uppercase; font-size: 18px; }}
+                        .footer {{ margin-top: 60px; font-size: 11px; color: #95a5a6; text-align: center; border-top: 1px solid #ddd; padding-top: 25px; }}
                     </style>
                 </head>
                 <body>
                     <div class="header">
-                        <h1>CARDIOLOGY ANALYSIS REPORT</h1>
-                        <p style="color:#7f8c8d;">Patient Record: <b>#{selected_record}</b> | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
-                        <hr style="border:0; border-top:1px solid #eee;">
-                        <p><b>Executive Summary:</b> {len(st.session_state.anomalies)} critical events identified. Types observed: {summary_str}.</p>
+                        <h1>CARDIAC DIAGNOSTIC ANALYSIS</h1>
+                        <p style="color:#7f8c8d; margin-top:5px;">Patient Record Reference: <b>{selected_record}</b> | Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                     </div>
                     
-                    <h3 class="section-title">Continuous Monitoring Record (MLII)</h3>
-                    <div style="background:#fff; padding:15px; border-radius:10px; border:1px solid #eee;">
+                    <h3 class="section-title">I. Continuous Monitoring Sequence</h3>
+                    <div class="ecg-paper">
                         {full_plot_html}
                     </div>
 
-                    <h3 class="section-title">Critical Point Grid (Detailed Events)</h3>
-                    <div class="grid">{anom_html}</div>
+                    <h3 class="section-title">II. Critical Point Analysis Grid</h3>
+                    <div class="grid">
+                        {self_building_grid()}
+                    </div>
                     
                     <div class="footer">
-                        This report was generated by the LA-NN Clinical Engine v1.0. 
-                        Clinical interpretation should be performed by a qualified healthcare professional.
+                        <b>CONFIDENTIAL MEDICAL RECORD</b><br>
+                        Generated via LA-NN (Liquid Attention Neural Network) Engine. <br>
+                        The grid spacing reflects a standard 1mm/5mm diagnostic scale for visual estimation.
                     </div>
                 </body>
             </html>
             """
             return html
+            
+        def self_building_grid():
+            items = ""
+            for i, a in enumerate(st.session_state.anomalies):
+                fig_a = go.Figure()
+                fig_a.add_trace(go.Scatter(y=a['data'], line=dict(color='#000', width=2)))
+                fig_a.update_layout(
+                    height=200, 
+                    margin=dict(l=0,r=0,t=0,b=0), 
+                    xaxis_visible=False, 
+                    yaxis_visible=True,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                )
+                html_plot = fig_a.to_html(include_plotlyjs='cdn', full_html=False)
+                items += f"""
+                <div class="event-card">
+                    <div class="event-header">
+                        <span>CRITICAL EVENT #{i+1} [{a['type']}]</span>
+                        <span>{a['offset_sec']:.2f}s</span>
+                    </div>
+                    <div class="ecg-paper" style="border:none; border-radius:0;">
+                        {html_plot}
+                    </div>
+                    <div style="padding: 10px; font-size: 11px; color: #666;">
+                        Detection Confidence: <b>{a['conf']:.2%}</b> | Captured at local time: {a['time']}
+                    </div>
+                </div>
+                """
+            return items
 
-        if st.download_button(
+        st.download_button(
             label="📄 SAVE CLINICAL REPORT",
             data=generate_html_report(),
             file_name=f"Clinical_Report_{selected_record}.html",
             mime="text/html",
             width='stretch'
-        ):
-            st.success("Report Generated!")
+        )
     st.markdown("### Model Config")
     st.code(f"""
 ODE Steps: {Config.ODE_STEPS}
@@ -455,7 +504,6 @@ if st.session_state.running:
         """, unsafe_allow_html=True)
         
         # 2. Plotting (Using Plotly for dynamic coloring)
-        import plotly.graph_objects as go
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             y=st.session_state.ecg_buffer, 
@@ -497,6 +545,7 @@ if st.session_state.running:
             full_plot_placeholder.plotly_chart(fig_full, width='stretch', config={'displayModeBar': True})
             
         current_idx += BUNDLE_SIZE
+        time.sleep(BUNDLE_SIZE / FS)
         
 else:
     # Idle State
@@ -521,7 +570,6 @@ if st.session_state.anomalies:
                 anomaly = st.session_state.anomalies[idx]
                 with cols[j]:
                     st.markdown(f"**{anomaly['type']} Class** ({idx+1}) | {anomaly['time']}")
-                    import plotly.express as px
                     fig_anom = px.line(anomaly['data'], height=150)
                     fig_anom.update_layout(
                         margin=dict(l=0, r=0, t=0, b=0),
