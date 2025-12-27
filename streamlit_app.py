@@ -122,6 +122,7 @@ if 'initialized' not in st.session_state:
     st.session_state.running = False
     st.session_state.history = []
     st.session_state.ecg_buffer = []
+    st.session_state.anomalies = [] # Store abnormal segments
     st.toast("✓ AI Model Ready", icon='✅')
 
 # --- Sidebar Controls ---
@@ -197,10 +198,10 @@ if st.session_state.running:
     # Constants
     FS = 360
     BUNDLE_SIZE = 15
-    MAX_BUFFER = 1500 # Approx 4 seconds
+    MAX_BUFFER = 1000 # Visible window
     
     current_idx = 0
-    last_beat_time = time.time()
+    trace_color = "#00f2ff" # Default cyan
     
     # Simple HR calculation (demo only)
     hr_val = 72
@@ -228,6 +229,24 @@ if st.session_state.running:
                     prediction_result = res
                     # Randomize HR slightly for demo effect on detections
                     hr_val = np.random.randint(68, 76) if prediction_result['prediction'] == 'N' else np.random.randint(90, 110)
+                    
+                    # Update Trace Color based on status
+                    if prediction_result['prediction'] != 'N':
+                        trace_color = "#ff3e3e" # Red for abnormality
+                        # "Push" for analysis: Capture segment
+                        anomaly_segment = engine.signal[max(0, i-180) : min(len(engine.signal), i+180)]
+                        st.session_state.anomalies.append({
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "type": prediction_result['prediction'],
+                            "conf": prediction_result['confidence'],
+                            "data": anomaly_segment.tolist()
+                        })
+                        # Keep only last 10 anomalies to avoid memory bloat
+                        if len(st.session_state.anomalies) > 10:
+                            st.session_state.anomalies.pop(0)
+                    else:
+                        trace_color = "#00f2ff" # Reset to Cyan for Normal
+                    
                     break
         
         # --- UI Updates ---
@@ -298,10 +317,24 @@ if st.session_state.running:
             </div>
         """, unsafe_allow_html=True)
         
-        # 2. Plotting (using streamlit line_chart for speed and compatibility)
-        # For a better look, we could use Plotly but it's slower in loops
-        df_plot = pd.DataFrame(st.session_state.ecg_buffer, columns=['Signal'])
-        plot_placeholder.line_chart(df_plot, height=350, use_container_width=True)
+        # 2. Plotting (Using Plotly for dynamic coloring)
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            y=st.session_state.ecg_buffer, 
+            mode='lines',
+            line=dict(color=trace_color, width=2),
+            name='ECG Lead MLII'
+        ))
+        fig.update_layout(
+            height=350,
+            margin=dict(l=0, r=0, t=0, b=0),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', range=[-2, 3])
+        )
+        plot_placeholder.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         
         # 3. History
         with log_placeholder.container():
@@ -317,11 +350,26 @@ else:
     alert_placeholder.markdown("<div class='metric-card'><div class='metric-label'>Alert Status</div><div class='metric-value'>STANDBY</div></div>", unsafe_allow_html=True)
     
     st.info("👈 Select a record and click 'START' to begin real-time clinical monitoring.")
+
+# --- Clinical Analysis Section (Anomalies) ---
+if st.session_state.anomalies:
+    st.markdown("---")
+    st.markdown("### 🔍 Clinical Review: Detected Abnormalities")
+    cols = st.columns(min(len(st.session_state.anomalies), 3))
     
-    # Show some info graphics if needed
-    st.markdown("""
-    ### About LA-NN Architecture
-    The **Liquid Attention Neural Network (LA-NN)** combines the speed of Liquid Neural Networks with the spatial context of Attention mechanisms.
-    - **Adaptive Time-Steps**: Uses ODE-based dynamics to adapt to signal frequency variations.
-    - **Clinical Decision Logic**: Multi-thresholding for high-confidence medical alerts.
-    """)
+    for idx, anomaly in enumerate(st.session_state.anomalies[-3:]): # Show last 3
+        with cols[idx]:
+            st.markdown(f"**{anomaly['type']} Class** | {anomaly['time']}")
+            import plotly.express as px
+            # Use area chart for the analysis clips
+            fig_anom = px.line(anomaly['data'], height=150)
+            fig_anom.update_layout(
+                margin=dict(l=0, r=0, t=0, b=0),
+                paper_bgcolor='rgba(255,0,0,0.05)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis_visible=False,
+                yaxis_visible=False
+            )
+            fig_anom.update_traces(line_color='#ff3e3e')
+            st.plotly_chart(fig_anom, use_container_width=True, key=f"anom_{idx}")
+            st.caption(f"Confidence: {anomaly['conf']:.2%}")
