@@ -1,0 +1,296 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LA-NN Clinical ECG Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@2.3.0/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.1.0"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #050510;
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .monitor-bg {
+            background: radial-gradient(circle at center, #101030 0%, #050510 100%);
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px rgba(255, 255, 255, 0.1) solid;
+        }
+        .lcd-text {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .alert-pulse-red {
+            animation: pulse-red 1s infinite;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+        .critical-text { color: #ff3e3e; text-shadow: 0 0 10px #ff3e3e; }
+        .normal-text { color: #3eff8b; text-shadow: 0 0 10px #3eff8b; }
+        .monitor-text { color: #ffeb3e; text-shadow: 0 0 10px #ffeb3e; }
+    </style>
+</head>
+<body class="monitor-bg h-screen w-screen p-4 flex flex-col">
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-6 glass p-4 rounded-xl">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight lcd-text uppercase text-blue-400">LA-NN Clinical Intelligence</h1>
+            <p class="text-xs text-gray-500 font-semibold tracking-widest uppercase">Deep Learning ECG Monitoring System v1.0</p>
+        </div>
+        <div class="flex gap-4 items-center">
+            <div id="status-tag" class="px-3 py-1 rounded-full text-xs font-bold glass text-green-400 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                SYSTEM ONLINE
+            </div>
+            <select id="record-select" class="glass rounded px-3 py-1 text-sm outline-none">
+                <option value="100">Record 100 (Normal Samples)</option>
+                <option value="106">Record 106 (Ventricular Bigeminy)</option>
+                <option value="200">Record 200 (Ventricular Tachycardia)</option>
+                <option value="203">Record 203 (Fusion / Complex Mixed)</option>
+            </select>
+            <button id="connect-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1 rounded font-bold text-sm transition">START MONITOR</button>
+        </div>
+    </header>
+
+    <div class="flex flex-1 gap-4 overflow-hidden">
+        <!-- Sidebar: Metrics -->
+        <div class="w-80 flex flex-col gap-4 overflow-y-auto pr-2">
+            <div class="glass p-4 rounded-xl">
+                <h3 class="text-gray-400 text-xs font-bold mb-3 uppercase tracking-widest">Model Confidence</h3>
+                <div id="prob-container" class="space-y-3">
+                    <!-- Dynamic Probabilities -->
+                </div>
+            </div>
+
+            <div class="glass p-4 rounded-xl flex-1 overflow-hidden flex flex-col">
+                <h3 class="text-gray-400 text-xs font-bold mb-3 uppercase tracking-widest">Diagnosis History</h3>
+                <div id="history-log" class="text-[10px] space-y-2 overflow-y-auto flex-1 font-mono">
+                    <!-- Events -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Main View -->
+        <div class="flex-1 flex flex-col gap-4">
+            <!-- ECG Monitor -->
+            <div class="flex-1 glass rounded-2xl relative overflow-hidden flex flex-col">
+                <div class="absolute top-4 left-6 flex gap-6 z-10">
+                    <div>
+                        <span class="text-[10px] text-gray-500 font-bold block">HEART RATE</span>
+                        <span id="hr-display" class="lcd-text text-3xl font-bold text-white">72 <span class="text-sm font-normal text-gray-400">BPM</span></span>
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-gray-500 font-bold block">MODEL STATE</span>
+                        <span id="prediction-badge" class="lcd-text text-3xl font-bold normal-text">NORMAL</span>
+                    </div>
+                </div>
+                <div class="absolute top-4 right-6 text-right z-10">
+                    <span class="text-[10px] text-gray-500 font-bold block">CLASSIFICATION</span>
+                    <div id="alert-indicator" class="px-4 py-1 rounded bg-green-900/40 border border-green-500/50 text-green-400 text-sm font-bold uppercase tracking-widest">
+                        LEVEL 1: STABLE
+                    </div>
+                </div>
+                <div class="flex-1 w-full pt-10 px-2">
+                    <canvas id="ecgChart"></canvas>
+                </div>
+            </div>
+
+             <!-- Info Footer -->
+             <div class="h-20 glass rounded-xl flex justify-around items-center p-4">
+                 <div class="text-center">
+                    <span class="text-[8px] text-gray-500 font-bold block uppercase">ODE Steps</span>
+                    <span class="lcd-text text-xl font-bold text-blue-400">6</span>
+                 </div>
+                 <div class="text-center">
+                    <span class="text-[8px] text-gray-500 font-bold block uppercase">Tau Range</span>
+                    <span class="lcd-text text-xl font-bold text-blue-400">0.1 - 10.0</span>
+                 </div>
+                 <div class="text-center">
+                    <span class="text-[8px] text-gray-500 font-bold block uppercase">Processing Latency</span>
+                    <span class="lcd-text text-xl font-bold text-green-400">< 2ms</span>
+                 </div>
+                 <div class="text-center">
+                    <span class="text-[8px] text-gray-500 font-bold block uppercase">Architecture</span>
+                    <span class="text-sm font-bold text-white uppercase tracking-tight">Liquid NN Hybrid</span>
+                 </div>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('ecgChart').getContext('2d');
+        const historyLog = document.getElementById('history-log');
+        const hrDisplay = document.getElementById('hr-display');
+        const predictionBadge = document.getElementById('prediction-badge');
+        const alertIndicator = document.getElementById('alert-indicator');
+        const probContainer = document.getElementById('prob-container');
+
+        let ws = null;
+        let lastBeatTime = Date.now();
+
+        // Initialize Chart
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'ECG Lead MLII',
+                    borderColor: '#00f2ff',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0,
+                    data: []
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'realtime',
+                        realtime: {
+                            duration: 4000,
+                            refresh: 50,
+                            delay: 200
+                        },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        grace: '10%',
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                },
+                animation: false,
+                elements: {
+                    line: {
+                        capBezierPoints: false 
+                    }
+                }
+            }
+        });
+
+        function updateProbabilities(probs) {
+            if (!probs) return;
+            probContainer.innerHTML = '';
+            Object.entries(probs).forEach(([label, val]) => {
+                const width = (val * 100).toFixed(1);
+                const color = label === 'N' ? 'bg-green-500' : (['V', 'F'].includes(label) ? 'bg-red-500' : 'bg-yellow-500');
+                probContainer.innerHTML += `
+                    <div>
+                        <div class="flex justify-between text-[10px] mb-1">
+                            <span class="font-bold">${label} CLASS</span>
+                            <span>${width}%</span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                            <div class="${color} h-full" style="width: ${width}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function handlePrediction(pred) {
+            if (!pred) return;
+            
+            // Update Heart Rate
+            const now = Date.now();
+            const diff = now - lastBeatTime;
+            const hr = Math.round(60000 / diff);
+            if (hr > 40 && hr < 200) hrDisplay.textContent = hr;
+            lastBeatTime = now;
+
+            // Update UI Based on Prediction
+            predictionBadge.textContent = pred.prediction === 'N' ? 'NORMAL' : (pred.prediction === 'V' ? 'VENTRICULAR' : 'ARRHYTHMIA');
+            
+            // Alert Level
+            if (pred.alert_level === 3) {
+                predictionBadge.className = 'lcd-text text-3xl font-bold critical-text alert-pulse-red rounded-lg p-1';
+                alertIndicator.className = 'px-4 py-1 rounded bg-red-900/60 border border-red-500 text-red-400 text-sm font-bold uppercase tracking-widest';
+                alertIndicator.textContent = 'LEVEL 3: CRITICAL';
+            } else if (pred.alert_level === 2) {
+                predictionBadge.className = 'lcd-text text-3xl font-bold monitor-text';
+                alertIndicator.className = 'px-4 py-1 rounded bg-yellow-900/40 border border-yellow-500/50 text-yellow-400 text-sm font-bold uppercase tracking-widest';
+                alertIndicator.textContent = 'LEVEL 2: MONITOR';
+            } else {
+                predictionBadge.className = 'lcd-text text-3xl font-bold normal-text';
+                alertIndicator.className = 'px-4 py-1 rounded bg-green-900/40 border border-green-500/50 text-green-400 text-sm font-bold uppercase tracking-widest';
+                alertIndicator.textContent = 'LEVEL 1: STABLE';
+            }
+
+            updateProbabilities(pred.probabilities);
+
+            // Log entry
+            const logItem = document.createElement('div');
+            const timeStr = new Date().toLocaleTimeString();
+            const colorClass = pred.alert_level === 3 ? 'text-red-400' : (pred.alert_level === 2 ? 'text-yellow-400' : 'text-green-400');
+            logItem.innerHTML = `<span class="text-gray-500">[${timeStr}]</span> <span class="${colorClass}">${pred.prediction} detected (Conf: ${(pred.confidence*100).toFixed(1)}%)</span>`;
+            historyLog.prepend(logItem);
+        }
+
+        function connect() {
+            const record = document.getElementById('record-select').value;
+            if (ws) ws.close();
+
+            console.log(`Connecting to WebSocket for record ${record}...`);
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/ecg/${record}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const fs = data.fs || 360;
+                const sampleInterval = 1000 / fs;
+
+                if (data.samples && data.samples.length > 0) {
+                    const now = Date.now();
+                    const bundleStartTime = now - (data.samples.length * sampleInterval);
+                    
+                    data.samples.forEach((s, index) => {
+                        chart.data.datasets[0].data.push({
+                            x: bundleStartTime + (index * sampleInterval),
+                            y: s
+                        });
+                    });
+                }
+
+                if (data.prediction) {
+                    handlePrediction(data.prediction);
+                }
+            };
+
+            ws.onopen = () => {
+                console.log("WebSocket Connected");
+                document.getElementById('status-tag').innerHTML = '<div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div> MONITORING ACTIVE';
+                document.getElementById('connect-btn').textContent = 'RESET SYSTEM';
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket Disconnected");
+                document.getElementById('status-tag').innerHTML = '<div class="w-2 h-2 rounded-full bg-red-400"></div> OFFLINE';
+                document.getElementById('connect-btn').textContent = 'START MONITOR';
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket Error:", err);
+            };
+        }
+
+        document.getElementById('connect-btn').addEventListener('click', connect);
+    </script>
+</body>
+</html>

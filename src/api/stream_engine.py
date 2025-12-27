@@ -1,0 +1,118 @@
+
+import os
+import numpy as np
+import wfdb
+import torch
+import torch.nn.functional as F
+from src.config import Config
+from src.data.preprocessing import normalize_signal
+import time
+import asyncio
+
+class ECGStreamEngine:
+    def __init__(self, model, record_name='100'):
+        self.model = model
+        self.config = Config
+        self.record_name = record_name
+        self.db_dir = os.path.join(Config.DATA_DIR, 'mitdb')
+        
+        # Load record
+        record = wfdb.rdrecord(os.path.join(self.db_dir, self.record_name))
+        self.signal = record.p_signal[:, 0]  # MLII channel
+        
+        # Load annotations for "Ground Truth" markers in demo
+        annotation = wfdb.rdann(os.path.join(self.db_dir, self.record_name), 'atr')
+        # Convert to SET for O(1) lookup - CRITICAL for real-time performance
+        self.ann_samples = set(annotation.sample)
+        self.ann_symbols = annotation.symbol
+        
+        self.current_idx = 0
+        self.window_size = Config.WINDOW_SIZE
+        self.half_window = self.window_size // 2
+        
+        # Reverse mapping for display
+        self.classes = Config.AAMI_CLASSES
+        
+    async def stream_samples(self, bundle_size=15):
+        """
+        Simulates real-time streaming of ECG samples in bundles.
+        Yields: (list_of_samples, prediction_if_any)
+        """
+        fs = 360
+        bundle_interval = bundle_size / fs  # Time for one bundle
+        
+        while self.current_idx < len(self.signal):
+            start_time = time.time()
+            bundled_samples = []
+            final_prediction = None
+            
+            # Fill bundle
+            for _ in range(bundle_size):
+                if self.current_idx >= len(self.signal):
+                    break
+                    
+                sample = self.signal[self.current_idx]
+                bundled_samples.append(float(sample))
+                
+                # Check for peak
+                if self.current_idx in self.ann_samples:
+                    # Run inference on peak
+                    pred = self.run_inference(self.current_idx)
+                    if pred:
+                        final_prediction = pred
+                
+                self.current_idx += 1
+            
+            if bundled_samples:
+                yield bundled_samples, final_prediction
+            
+            # Synchronize with real time
+            elapsed = time.time() - start_time
+            sleep_time = max(0, bundle_interval - elapsed)
+            await asyncio.sleep(sleep_time)
+
+    def run_inference(self, r_peak_idx):
+        """Runs model inference on the window surrounding r_peak_idx"""
+        start = r_peak_idx - self.half_window
+        end = r_peak_idx + self.half_window
+        
+        if start < 0 or end > len(self.signal):
+            return None
+            
+        # 1. Extract and Normalize
+        segment = self.signal[start:end]
+        segment = normalize_signal(segment)
+        
+        # 2. Prepare for Model
+        # Input shape: (1, seq_len, 1)
+        x = torch.FloatTensor(segment).unsqueeze(0).unsqueeze(-1).to(Config.DEVICE)
+        
+        # 3. Model Forward
+        self.model.eval()
+        with torch.no_grad():
+            outputs, _ = self.model(x)
+            probs = F.softmax(outputs, dim=1).cpu().numpy()[0]
+            pred_idx = np.argmax(probs)
+            
+        # 4. Result dict
+        result = {
+            "prediction": self.classes[pred_idx],
+            "confidence": float(probs[pred_idx]),
+            "probabilities": {self.classes[i]: float(probs[i]) for i in range(len(self.classes))},
+            "alert_level": self.get_alert_level(probs)
+        }
+        return result
+
+    def get_alert_level(self, probs):
+        """Clinical Decision Logic"""
+        # Indices: N=0, S=1, V=2, F=3, Q=4
+        p_N = probs[0]
+        p_V = probs[2]
+        p_F = probs[3]
+        
+        if p_N > Config.THETA_NORMAL:
+            return 1 # Normal
+        elif p_V > Config.THETA_CRITICAL or p_F > Config.THETA_CRITICAL:
+            return 3 # Critical
+        else:
+            return 2 # Monitor

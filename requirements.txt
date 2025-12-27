@@ -1,6 +1,9 @@
-
 torch>=2.0.0
 numpy
 scikit-learn
 tqdm
 wfdb
+fastapi
+uvicorn
+websockets
+python-multipart
