@@ -241,8 +241,8 @@ if st.session_state.running:
                             "conf": prediction_result['confidence'],
                             "data": anomaly_segment.tolist()
                         })
-                        # Keep only last 10 anomalies to avoid memory bloat
-                        if len(st.session_state.anomalies) > 10:
+                        # Keep only last 50 anomalies to capture a full record's worth of data
+                        if len(st.session_state.anomalies) > 50:
                             st.session_state.anomalies.pop(0)
                     else:
                         trace_color = "#00f2ff" # Reset to Cyan for Normal
@@ -354,22 +354,27 @@ else:
 # --- Clinical Analysis Section (Anomalies) ---
 if st.session_state.anomalies:
     st.markdown("---")
-    st.markdown("### 🔍 Clinical Review: Detected Abnormalities")
-    cols = st.columns(min(len(st.session_state.anomalies), 3))
+    st.markdown(f"### 🔍 Clinical Review: All Detected Abnormalities ({len(st.session_state.anomalies)})")
     
-    for idx, anomaly in enumerate(st.session_state.anomalies[-3:]): # Show last 3
-        with cols[idx]:
-            st.markdown(f"**{anomaly['type']} Class** | {anomaly['time']}")
-            import plotly.express as px
-            # Use area chart for the analysis clips
-            fig_anom = px.line(anomaly['data'], height=150)
-            fig_anom.update_layout(
-                margin=dict(l=0, r=0, t=0, b=0),
-                paper_bgcolor='rgba(255,0,0,0.05)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                xaxis_visible=False,
-                yaxis_visible=False
-            )
-            fig_anom.update_traces(line_color='#ff3e3e')
-            st.plotly_chart(fig_anom, use_container_width=True, key=f"anom_{idx}")
-            st.caption(f"Confidence: {anomaly['conf']:.2%}")
+    # Display all anomalies in a 3-column grid
+    num_anomalies = len(st.session_state.anomalies)
+    for i in range(0, num_anomalies, 3):
+        cols = st.columns(3)
+        for j in range(3):
+            idx = i + j
+            if idx < num_anomalies:
+                anomaly = st.session_state.anomalies[idx]
+                with cols[j]:
+                    st.markdown(f"**{anomaly['type']} Class** ({idx+1}) | {anomaly['time']}")
+                    import plotly.express as px
+                    fig_anom = px.line(anomaly['data'], height=150)
+                    fig_anom.update_layout(
+                        margin=dict(l=0, r=0, t=0, b=0),
+                        paper_bgcolor='rgba(255,0,0,0.05)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        xaxis_visible=False,
+                        yaxis_visible=False
+                    )
+                    fig_anom.update_traces(line_color='#ff3e3e')
+                    st.plotly_chart(fig_anom, use_container_width=True, key=f"anom_{idx}")
+                    st.caption(f"Confidence: {anomaly['conf']:.2%}")
