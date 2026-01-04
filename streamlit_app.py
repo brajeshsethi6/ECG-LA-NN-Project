@@ -136,13 +136,90 @@ with st.sidebar:
     st.markdown("Liquid Neural Network Hybrid Monitoring")
     
     st.markdown("---")
-    record_map = {
+    
+    # 1. Dynamic Record Scanning
+    db_dir = os.path.join(Config.DATA_DIR, 'mitdb')
+    available_records = []
+    if os.path.exists(db_dir):
+        # Look for .hea files to identify records
+        available_records = sorted(list(set([f.split('.')[0] for f in os.listdir(db_dir) if f.endswith('.hea')])))
+    
+    # Default common records for quick access
+    preset_records = {
         "100": "Normal Sinus (100)",
         "106": "Ventricular Bigeminy (106)",
         "200": "Ventricular Tachycardia (200)",
         "203": "Complex Arrhythmia (203)"
     }
-    selected_record = st.selectbox("Select Patient Record", list(record_map.keys()), format_func=lambda x: record_map[x])
+    
+    # Combine presets with any other found records
+    all_record_options = {}
+    for r in available_records:
+        if r in preset_records:
+            all_record_options[r] = preset_records[r]
+        else:
+            all_record_options[r] = f"Record {r}"
+            
+    # --- New Feature: Add Custom ECG ---
+    with st.expander("➕ ADD NEW ECG REPORT"):
+        st.markdown("""
+        **Supported Formats:**
+        1. **CSV**: Single column of voltage values (360Hz recommended).
+        2. **WFDB**: Upload both `.hea` and `.dat` files (optionally `.atr`).
+        """)
+        
+        uploaded_files = st.file_uploader(
+            "Upload ECG Files", 
+            type=['csv', 'dat', 'hea', 'atr'], 
+            accept_multiple_files=True
+        )
+        
+        if uploaded_files:
+            new_wfdb_uploaded = False
+            for uploaded_file in uploaded_files:
+                # 1. Handle CSVs (Simulated real-time)
+                if uploaded_file.name.endswith('.csv'):
+                    try:
+                        df_upload = pd.read_csv(uploaded_file)
+                        if 'voltage' in df_upload.columns:
+                            custom_signal = df_upload['voltage'].values
+                        elif 'signal' in df_upload.columns:
+                            custom_signal = df_upload['signal'].values
+                        else:
+                            custom_signal = df_upload.iloc[:, 0].values
+                        
+                        st.session_state.custom_signal = custom_signal.astype(np.float32)
+                        st.session_state.custom_filename = uploaded_file.name
+                        all_record_options["UPLOADED"] = f"Uploaded: {uploaded_file.name}"
+                        st.success(f"CSV Loaded: {uploaded_file.name}")
+                    except Exception as e:
+                        st.error(f"Error loading CSV: {e}")
+                
+                # 2. Handle WFDB (Physical save to data/mitdb)
+                else:
+                    save_path = os.path.join(db_dir, uploaded_file.name)
+                    # Check if exists to avoid redundant writes, though overwrite is usually fine
+                    with open(save_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    new_wfdb_uploaded = True
+            
+            if new_wfdb_uploaded:
+                st.info("WFDB files saved to database. They will appear in the selection list after refresh.")
+                if st.button("Refresh Record List"):
+                    st.rerun()
+
+    if "UPLOADED" in all_record_options:
+        # Move UPLOADED to top if it exists
+        keys = ["UPLOADED"] + [k for k in all_record_options.keys() if k != "UPLOADED"]
+    else:
+        keys = list(all_record_options.keys())
+
+    selected_record = st.selectbox(
+        "Select Patient Record", 
+        keys, 
+        format_func=lambda x: all_record_options[x],
+        index=0
+    )
     
     col_btn1, col_btn2 = st.columns(2)
     if col_btn1.button("START", width='stretch', type="primary"):
@@ -374,7 +451,9 @@ full_plot_placeholder = st.empty()
 
 # --- Monitoring Loop ---
 if st.session_state.running:
-    engine = ECGStreamEngine(model_res, record_name=selected_record)
+    # Handle custom upload vs preset record
+    custom_sig = st.session_state.get('custom_signal') if selected_record == "UPLOADED" else None
+    engine = ECGStreamEngine(model_res, record_name=selected_record, custom_signal=custom_sig)
     
     # Constants
     FS = 360

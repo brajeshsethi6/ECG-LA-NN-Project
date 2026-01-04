@@ -7,3 +7,7 @@ fastapi
 uvicorn
 websockets
 python-multipart
+scipy
+streamlit
+pandas
+plotly

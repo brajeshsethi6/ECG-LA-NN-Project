@@ -8,23 +8,31 @@ from src.config import Config
 from src.data.preprocessing import normalize_signal
 import time
 import asyncio
+from scipy.signal import find_peaks
 
 class ECGStreamEngine:
-    def __init__(self, model, record_name='100'):
+    def __init__(self, model, record_name='100', custom_signal=None):
         self.model = model
         self.config = Config
         self.record_name = record_name
         self.db_dir = os.path.join(Config.DATA_DIR, 'mitdb')
         
-        # Load record
-        record = wfdb.rdrecord(os.path.join(self.db_dir, self.record_name))
-        self.signal = record.p_signal[:, 0]  # MLII channel
-        
-        # Load annotations for "Ground Truth" markers in demo
-        annotation = wfdb.rdann(os.path.join(self.db_dir, self.record_name), 'atr')
-        # Convert to SET for O(1) lookup - CRITICAL for real-time performance
-        self.ann_samples = set(annotation.sample)
-        self.ann_symbols = annotation.symbol
+        if custom_signal is not None:
+            self.signal = custom_signal
+            self.ann_samples = self._detect_peaks(self.signal)
+            self.record_name = "Uploaded CSV"
+        else:
+            # Load record
+            record = wfdb.rdrecord(os.path.join(self.db_dir, self.record_name))
+            self.signal = record.p_signal[:, 0]  # MLII channel
+            
+            # Load annotations for "Ground Truth" markers in demo
+            try:
+                annotation = wfdb.rdann(os.path.join(self.db_dir, self.record_name), 'atr')
+                self.ann_samples = set(annotation.sample)
+            except Exception:
+                # If no annotation found, detect peaks automatically
+                self.ann_samples = self._detect_peaks(self.signal)
         
         self.current_idx = 0
         self.window_size = Config.WINDOW_SIZE
@@ -116,3 +124,11 @@ class ECGStreamEngine:
             return 3 # Critical
         else:
             return 2 # Monitor
+
+    def _detect_peaks(self, signal):
+        """Simple peak detector for custom signals without annotations"""
+        # Normalize for peak detection
+        sig = (signal - np.mean(signal)) / np.std(signal)
+        # Focus on R-peaks (positive)
+        peaks, _ = find_peaks(sig, height=1.5, distance=180)
+        return set(peaks)
