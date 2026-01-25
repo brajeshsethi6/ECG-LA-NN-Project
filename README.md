@@ -27,6 +27,11 @@ LA-NN-Project/
 
 ## Setup & Usage
 
+1. **TECHNICAL DEMO**: See [TECHNICAL_DEMO.md](TECHNICAL_DEMO.md) for a full presentation guide using the Streamlit dashboard.
+2. **CODE FLOW**: See [CODE_FLOW.md](CODE_FLOW.md) for a deep dive into the architecture and data pipelines.
+
+3. **PROJECT DEEP DIVE**: See [PROJECT_DEEP_DIVE.md](PROJECT_DEEP_DIVE.md) for a comprehensive explanation of every function, logic, and architectural decision.
+
 1. **Install Dependencies:**
    ```bash
    pip install -r requirements.txt
