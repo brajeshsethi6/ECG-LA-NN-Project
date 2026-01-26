@@ -23,6 +23,7 @@ class Config:
     NUM_ATTENTION_HEADS = 4
     TAU_MIN = 0.1
     TAU_MAX = 10.0
+    BIDIRECTIONAL = True
     DROPOUT = 0.1
     
     # Training Hyperparameters

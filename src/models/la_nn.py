@@ -14,6 +14,7 @@ class LANN(nn.Module):
         self.ode_steps = config.ODE_STEPS
         self.tau_min = config.TAU_MIN
         self.tau_max = config.TAU_MAX
+        self.bidirectional = getattr(config, 'BIDIRECTIONAL', True)
         self.num_heads = config.NUM_ATTENTION_HEADS
         self.num_classes = config.NUM_CLASSES
         self.dropout_rate = config.DROPOUT
@@ -25,7 +26,8 @@ class LANN(nn.Module):
             num_layers=self.num_lnn_layers,
             ode_steps=self.ode_steps,
             tau_min=self.tau_min,
-            tau_max=self.tau_max
+            tau_max=self.tau_max,
+            bidirectional=self.bidirectional
         )
         
         # 2. Multi-Head Attention Block
