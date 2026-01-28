@@ -35,13 +35,12 @@ The system follows a strict pipeline: **Ingest -> Segment -> Liquid Encode -> At
     *   *Windowing*: Focuses the model on one beat at a time.
     *   *Normalization*: ECGs vary in amplitude based on patient body type. Normalization ($ \frac{x - \mu}{\sigma} $) ensures the model sees "relative shape" rather than raw voltage, making it universal.
 
-### Step 3: Liquid Encoding (`src/models/lnn.py`)
-*   **Function**: `LNNEncoder` -> `LiquidTimeConstantCell`
+### Step 3: Biological LTC Encoding (`src/models/ltc_cell.py`)
+*   **Function**: `BiologicalLTCCell`
 *   **Action**: The 180-sample sequence is fed into the Liquid cells.
-    *   **ODE Solver**: Inside `ode_step`, the cell solves a differential equation: 
-        $$ \frac{dh}{dt} = \frac{-h(t) + f(x(t))}{\tau} $$
-    *   **Time Constant ($\tau$)**: This is the "Liquid" part. The network *learns* how fast or slow to react to changes in the signal for every single millisecond.
-*   **Why Needed**: This allows the model to adapt. For a sharp spike (R-peak), $\tau$ becomes small (fast reaction). For a slow wave (T-wave), $\tau$ becomes large (slow reaction). CNNs cannot do this.
+    *   **Biophysical ODE**: Inside the cell, it solves a conductance-based differential equation using **Semi-implicit Euler Integration**.
+    *   **Interpretable Parameters**: The cell learns physical parameters like **Membrane Capacitance ($C_m$)**, **Leak Conductance ($G_{leak}$)**, and **Reversal Potentials ($E_{rev}$)**.
+*   **Why Needed**: This allows the model to mimic the actual electrical behavior of heart cells (excitable membranes). It is extremely stable even for "stiff" signals and provides biological interpretability that standard RNNs lack.
 
 ### Step 4: Contextual Attention (`src/models/attention.py`)
 *   **Function**: `MultiHeadAttentionBlock`
@@ -51,7 +50,7 @@ The system follows a strict pipeline: **Ingest -> Segment -> Liquid Encode -> At
 *   **Why Needed**: LNNs are great at immediate dynamics (step-by-step), but they can forget what happened at the start of the beat by the time they reach the end. Attention fixes this by looking at the *entire* global picture instantly.
 
 ### Step 5: Classification (`src/models/la_nn.py`)
-*   **Function**: `LANN.forward`
+*   **Function**: `BioLANN.forward`
 *   **Action**:
     1.  **Global Pooling**: Averages the features across all time steps to get one "summary vector" for the beat.
     2.  **Linear Layer**: Maps this vector to 5 output numbers (Probabilities for N, S, V, F, Q).
@@ -67,15 +66,15 @@ The system follows a strict pipeline: **Ingest -> Segment -> Liquid Encode -> At
 
 ## 📚 3. Function-Level Deep Dive
 
-### A. `src/models/lnn.py`
+### A. `src/models/ltc_cell.py`
 
-#### `compute_tau(x, h)`
-*   **Logic**: Calculates the time-constant $\tau$ based on current input $x$ and hidden state $h$.
-*   **Why**: This is the heart of the "Liquid" architecture. It dynamically adjusts the system's "speed" of processing.
+#### `Semi-implicit Euler`
+*   **Logic**: Updates the state using: $v(t+1) = \frac{C_m v(t) + G_{leak} V_{leak} + \sum w E_{rev}}{C_m + G_{leak} + \sum w}$.
+*   **Why**: This integration scheme is unconditionally stable and allows the model to handle very fast transients (like R-peaks) without numerical "explosion," which is a common failure point for standard Euler solvers.
 
-#### `ode_step(x, h, tau, f_val)`
-*   **Logic**: Performs one step of Euler Integration. $h_{new} = h_{old} + \frac{dh}{dt} \times \Delta t$.
-*   **Why**: Neural networks usually jump from layer to layer. This function smooths the transition, mimicking biological neurons.
+#### `Conductance-based Synapses`
+*   **Logic**: Synaptic strength is modeled by $\sigma(v_{pre} - \mu)$, impacting the total conductance of the "neuron".
+*   **Why**: Directly mimics how real cardiac synapses gate ion flow.
 
 ### B. `src/models/attention.py`
 

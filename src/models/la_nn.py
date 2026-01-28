@@ -1,71 +1,99 @@
 
 import torch
 import torch.nn as nn
-from .lnn import LNNEncoder
+from .ltc_cell import BiologicalLTCCell
 from .attention import MultiHeadAttentionBlock
 
-class LANN(nn.Module):
-    def __init__(self, config):
-        super(LANN, self).__init__()
+class BioLANN(nn.Module):
+    """
+    Biological Liquid Attention Neural Network (Bio-LANN).
+    
+    This model integrates the biophysical LTC cell with Mixed Memory (LSTM)
+    and Multi-Head Attention for state-of-the-art sequence classification
+    rooted in biological realism.
+    """
+    def __init__(self, input_dim, hidden_dim, num_classes, 
+                 ode_steps=6, num_heads=4, dropout=0.1, mixed_memory=True):
+        super(BioLANN, self).__init__()
         
-        self.input_dim = config.INPUT_DIM
-        self.hidden_dim = config.HIDDEN_DIM
-        self.num_lnn_layers = config.NUM_LNN_LAYERS
-        self.ode_steps = config.ODE_STEPS
-        self.tau_min = config.TAU_MIN
-        self.tau_max = config.TAU_MAX
-        self.bidirectional = getattr(config, 'BIDIRECTIONAL', True)
-        self.num_heads = config.NUM_ATTENTION_HEADS
-        self.num_classes = config.NUM_CLASSES
-        self.dropout_rate = config.DROPOUT
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.mixed_memory = mixed_memory
         
-        # 1. LNN Encoder
-        self.lnn_encoder = LNNEncoder(
-            input_dim=self.input_dim,
-            hidden_dim=self.hidden_dim,
-            num_layers=self.num_lnn_layers,
-            ode_steps=self.ode_steps,
-            tau_min=self.tau_min,
-            tau_max=self.tau_max,
-            bidirectional=self.bidirectional
+        # 1. Mixed Memory Component (LSTM-based)
+        # NCPS uses this to handle long-term gradients while the LTC 
+        # handles the dynamic short-term temporal features.
+        if self.mixed_memory:
+            self.lstm = nn.LSTMCell(input_dim, hidden_dim)
+        
+        # 2. Biological LTC Cell (The 'Liquid' part)
+        self.ltc_cell = BiologicalLTCCell(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            ode_steps=ode_steps
         )
         
-        # 2. Multi-Head Attention Block
-        self.attention_block = MultiHeadAttentionBlock(
-            d_model=self.hidden_dim,
-            num_heads=self.num_heads,
-            dropout=self.dropout_rate
+        # 3. Attention Block
+        self.attention = MultiHeadAttentionBlock(
+            d_model=hidden_dim,
+            num_heads=num_heads,
+            dropout=dropout
         )
         
-        # 3. Classification Head
-        # "The final aggregated latent vector is passed through a classification layer"
+        # 4. Readout / Classification
         self.classifier = nn.Sequential(
-            nn.Dropout(self.dropout_rate),
-            nn.Linear(self.hidden_dim, self.num_classes)
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, num_classes)
         )
 
     def forward(self, x):
-        # x shape: (batch_size, seq_len, input_dim)
+        # x shape: (batch, seq_len, input_dim)
+        batch_size, seq_len, _ = x.size()
+        device = x.device
         
-        # LNN Encoder
-        lnn_out = self.lnn_encoder(x) # (batch_size, seq_len, hidden_dim)
+        # Initial states
+        h_ltc = torch.zeros(batch_size, self.hidden_dim).to(device)
+        if self.mixed_memory:
+            h_lstm = torch.zeros(batch_size, self.hidden_dim).to(device)
+            c_lstm = torch.zeros(batch_size, self.hidden_dim).to(device)
         
-        # Attention Block
-        attn_out, attn_weights = self.attention_block(lnn_out) # (batch_size, seq_len, hidden_dim)
+        outputs = []
         
-        # Global Average Pooling (Aggregation)
-        # Check if we should use GAP or specific token. Using GAP is standard for sequence classification without CLS token.
-        aggregated_features = torch.mean(attn_out, dim=1) # (batch_size, hidden_dim)
+        # RNN Loop
+        for t in range(seq_len):
+            x_t = x[:, t, :]
+            
+            # Step A: Mixed Memory Update (LSTM)
+            if self.mixed_memory:
+                h_lstm, c_lstm = self.lstm(x_t, (h_lstm, c_lstm))
+                # The LTC state can be initialized/influenced by the LSTM 
+                # or we can pass the LSTM output as input. 
+                # Standard Mixed-Memory NCPS: h_ltc = LTC(inputs, h_lstm)
+                h_ltc = self.ltc_cell(x_t, h_lstm)
+            else:
+                h_ltc = self.ltc_cell(x_t, h_ltc)
+                
+            outputs.append(h_ltc.unsqueeze(1))
+            
+        # Combine recurrent outputs: (batch, seq_len, hidden_dim)
+        rnn_out = torch.cat(outputs, dim=1)
         
-        # Classification
-        logits = self.classifier(aggregated_features) # (batch_size, num_classes)
+        # Step B: Attention Mechanism
+        attn_out, weights = self.attention(rnn_out)
         
-        return logits, attn_weights
+        # Step C: Global Aggregation (Average Pooling)
+        # Summing or averaging the attended features
+        pooled = torch.mean(attn_out, dim=1)
+        
+        # Step D: Classification
+        logits = self.classifier(pooled)
+        
+        return logits, weights
 
-    def get_lnn_taus(self, x):
-        """
-        Helper method to extract Tau values for interpretability analysis.
-        This would require modifying LNNEncoder to return taus.
-        Currently a placeholder.
-        """
-        pass
+    def get_biological_params(self):
+        """Returns the interpretable parameters of the LTC cell."""
+        return {
+            "gleak": torch.sigmoid(self.ltc_cell.gleak).detach(),
+            "cm": torch.sigmoid(self.ltc_cell.cm).detach(),
+            "vleak": self.ltc_cell.vleak.detach()
+        }

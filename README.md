@@ -12,7 +12,7 @@ LA-NN-Project/
 ├── src/
 │   ├── config.py          # Centralized configuration (Hyperparameters, Paths)
 │   ├── models/            # Neural Network Modules
-│   │   ├── lnn.py         # Liquid Time-Constant (LTC) Cells & Encoder
+│   │   ├── ltc_cell.py    # Biological Liquid Time-Constant (LTC) Cells
 │   │   ├── attention.py   # Multi-Head Attention & Positional Encoding
 │   │   └── la_nn.py       # Main LA-NN Assembly
 │   ├── data/              # Data Pipeline
@@ -27,10 +27,10 @@ LA-NN-Project/
 
 ## Setup & Usage
 
-1. **TECHNICAL DEMO**: See [TECHNICAL_DEMO.md](TECHNICAL_DEMO.md) for a full presentation guide using the Streamlit dashboard.
-2. **CODE FLOW**: See [CODE_FLOW.md](CODE_FLOW.md) for a deep dive into the architecture and data pipelines.
+1. **TECHNICAL DEMO**: See [docs/END_TO_END_DEMO_GUIDE.md](docs/END_TO_END_DEMO_GUIDE.md) for a full presentation guide using the Streamlit dashboard.
+2. **CODE FLOW**: See [docs/COMPLETE_CODE_FLOW.md](docs/COMPLETE_CODE_FLOW.md) for a deep dive into the architecture and data pipelines.
 
-3. **PROJECT DEEP DIVE**: See [PROJECT_DEEP_DIVE.md](PROJECT_DEEP_DIVE.md) for a comprehensive explanation of every function, logic, and architectural decision.
+3. **PROJECT DEEP DIVE**: See [docs/PROJECT_DEEP_DIVE.md](docs/PROJECT_DEEP_DIVE.md) for a comprehensive explanation of every function, logic, and architectural decision.
 
 1. **Install Dependencies:**
    ```bash

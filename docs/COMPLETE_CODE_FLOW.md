@@ -11,7 +11,7 @@ This document is the **definitive reference** for the code execution path within
 | `main.py` | **Entry Point (Training)** | Orchestrates data loading, model init, and training loops. |
 | `streamlit_app.py` | **Entry Point (Demo)** | Runs the User Interface and Real-Time visualization logic. |
 | `src/data/preprocessing.py` | **Data ETLL** | Extract (read signals), Transform (Windowing -180/+180), Load (Tensoring). |
-| `src/models/` | **Neural Architecture** | Contains the custom logical blocks: `lnn.py` (Time), `attention.py` (Context), `la_nn.py` (Assembly). |
+| `src/models/` | **Neural Architecture** | Contains the custom logical blocks: `ltc_cell.py` (LTC/Time), `attention.py` (Context), `la_nn.py` (Assembly). |
 | `src/api/stream_engine.py` | **Simulation Engine** | Creates the "Live Stream" effect by yielding data in real-time buckets. |
 | `src/training/trainer.py` | **Optimization Loop** | Handles the backpropagation, loss calculation, and epoch management. |
 
@@ -35,9 +35,10 @@ This specific flow runs when you execute `python main.py`.
     *   **Dataset Creation**: Warps tensors into `PyTorch DataLoader` (Train/Val/Test).
 
 ### Phase B: Model Construction (`src/models/la_nn.py`)
-1.  **`LANN.__init__`**:
-    *   Builds `LNNEncoder` (3 layers of Liquid Cells).
-    *   Builds `MultiHeadAttentionBlock` (8 Heads).
+1.  **`BioLANN.__init__`**:
+    *   Builds `BiologicalLTCCell` (Conductance-based LTC).
+    *   Incorporates **Mixed Memory** (LSTM Cell) to handle long-range gradients.
+    *   Builds `MultiHeadAttentionBlock` (4 Heads).
     *   Builds `Classifier` (Linear: Hidden Dim -> 5 Classes).
 
 ### Phase C: The Training Loop (`src/training/trainer.py`)
@@ -59,7 +60,7 @@ This flow runs during the Demo command `streamlit run streamlit_app.py`.
 
 ### Phase A: UI & Engine Startup
 1.  **`load_model()`**:
-    *   Instantiates `LANN` structure.
+    *   Instantiates `BioLANN` structure.
     *   Loads weights from `la_nn_best.pth`.
     *   Sets mode to `.eval()` (freezes dropout/gradients).
 2.  **`ECGStreamEngine` Init** (`src/api/stream_engine.py`):
@@ -105,9 +106,9 @@ Tracking the shape of the data matrix is the best way to understand the Deep Lea
 | :--- | :--- | :--- |
 | **Raw Input** | `(180, 1)` | A single heartbeat window (0.5s). |
 | **Batching** | `(Batch, 180, 1)` | Grouped for processing (Batch=1 during inference). |
-| **LNN Encoder** | `(Batch, 180, 32)` | Time-series expanded to Hidden Dimensions (32 features). |
-| **Attention** | `(Batch, 180, 32)` | Context applied. Shape stays same, but values are enriched. |
-| **Global Pooling** | `(Batch, 32)` | Averaged across time. Time dimension collapses. |
+| **LTC/LSTM Layer** | `(Batch, 180, 48)` | Time-series expanded to Hidden Dimensions (48 features). |
+| **Attention** | `(Batch, 180, 48)` | Context applied. Shape stays same, but values are enriched. |
+| **Global Pooling** | `(Batch, 48)` | Averaged across time. Time dimension collapses. |
 | **Classifier** | `(Batch, 5)` | Reduced to 5 Logic scores (one per Class). |
 | **Softmax** | `(Batch, 5)` | Converted to Probabilities (Sum = 1.0). |
 

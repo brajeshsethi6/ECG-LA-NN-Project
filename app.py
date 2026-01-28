@@ -14,7 +14,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.config import Config
-from src.models.la_nn import LANN
+from src.models.la_nn import BioLANN
 from src.api.stream_engine import ECGStreamEngine
 from contextlib import asynccontextmanager
 
@@ -25,7 +25,14 @@ model_container = {"model": None}
 async def lifespan(app: FastAPI):
     # Startup logic
     Config.ensure_dirs()
-    model = LANN(Config)
+    model = BioLANN(
+        input_dim=Config.INPUT_DIM,
+        hidden_dim=Config.HIDDEN_DIM,
+        num_classes=Config.NUM_CLASSES,
+        ode_steps=Config.ODE_STEPS,
+        num_heads=Config.NUM_ATTENTION_HEADS,
+        dropout=Config.DROPOUT
+    )
     model_path = os.path.join(Config.MODELS_DIR, 'la_nn_best.pth')
     
     if os.path.exists(model_path):

@@ -18,9 +18,9 @@ The LA-NN project is designed to detect cardiac arrhythmias in real-time. It com
 
 ## 2. Core Architecture
 
-### **Liquid Neural Network (LNN)**
-Located in `src/models/lnn.py`.
-- **LiquidTimeConstantCell**: Implements the ODE-based LTC cell.
+### **Biological LTC Cell**
+Located in `src/models/ltc_cell.py`.
+- **BiologicalLTCCell**: Implements the biophysical conductance-based LTC cell.
   - Evolves hidden state $h$ based on the formula: $\frac{dh}{dt} = \frac{-h + f(x, h)}{\tau(x, h)}$.
   - Uses Euler integration across defined `ode_steps`.
 - **LNNEncoder**: A multi-layer wrapper for LTC cells that processes sequential data.
@@ -32,7 +32,7 @@ Located in `src/models/attention.py`.
 
 ### **LA-NN Assembly**
 Located in `src/models/la_nn.py`.
-- **LANN**: The main model class uniting the LNN encoder, the attention block, and the classification head.
+- **BioLANN**: The main model class uniting the LTC cells (with mixed memory), the attention block, and the classification head.
 
 ---
 

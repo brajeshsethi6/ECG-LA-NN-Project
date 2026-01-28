@@ -20,18 +20,15 @@ This section defines the global configuration for the project. Key parameters in
 ## 3. Model Architecture
 The core innovation lies in the hybrid **LA-NN** architecture, combining Liquid Neural Networks (LNN) with Multi-Head Attention.
 
-### A. Liquid Time Constant Cell (`LiquidTimeConstantCell`)
-This is the fundamental building block. It models the hidden state dynamics using an Ordinary Differential Equation (ODE):
-$$ \frac{dh}{dt} = \frac{-h(t) + f(x(t), h(t))}{\tau(x(t), h(t))} $$
-- **`compute_tau`**: Dynamically computes the time constant $\tau$ based on input $x$ and current state $h$.
-- **`compute_f`**: Computes the nonlinearity.
-- **`ode_step`**: Performs an Euler integration step to update the state $h$.
+### A. Biological LTC Cell (`BiologicalLTCCell`)
+This is the fundamental building block. It models the hidden state dynamics using a conductance-based Ordinary Differential Equation (ODE):
+- **Biophysical Parameters**: Learns physical values like Membrane Capacitance ($C_m$), Leak Conductance ($G_{leak}$), and Reversal Potentials.
+- **Semi-implicit Euler Integration**: A highly stable numerical solver for stiff ODEs.
 
-### B. LNN Encoder (`LNNEncoder`)
-This module stacks multiple `LiquidTimeConstantCell` layers.
-- It processes the input sequence time-step by time-step.
-- The output of one layer flows into the next.
-- The final output gives a sequence of hidden states.
+### B. Mixed Memory Architecture
+To improve long-term dependency modeling while maintaining biological realism:
+- **Mixed Memory**: Combines an LSTM cell with the Biological LTC cell.
+- The LSTM handles long-term gradient flow (memory), while the LTC models the high-frequency temporal dynamics.
 
 ### C. Multi-Head Attention Block (`MultiHeadAttentionBlock`)
 To capture long-term dependencies in the ECG signal:
@@ -39,10 +36,10 @@ To capture long-term dependencies in the ECG signal:
 - **Multi-Head Attention**: Allows the model to focus on different parts of the signal simultaneously.
 - **Residual Connections & LayerNorm**: Standard Transformer-style blocks for stability.
 
-### D. The Full Model (`LANN`)
+### D. The Full Model (`BioLANN`)
 Combines the components:
-1. **Input** $\to$ **LNN Encoder** (Extracts dynamic features)
-2. **LNN Output** $\to$ **Attention Block** (Refines features/context)
+1. **Input** $\to$ **Mixed Memory / LTC Loop** (Extracts dynamic features)
+2. **LTC Output** $\to$ **Attention Block** (Refines features/context)
 3. **Aggregation**: Global Average Pooling triggers a unified feature vector.
 4. **Classifier**: A final Linear layer outputs class logits.
 

@@ -48,13 +48,13 @@ This is the journey of a single heartbeat through the generic codebase.
 
 ### Phase 2: The Model (`src/models`)
 *   **Input**: Tensor of shape `(Batch_Size, 180, 1)`.
-*   **Layer 1 (LNN)**: `lnn.py`
-    *   The signal passes through `LiquidTimeConstantCell`.
-    *   It solves the ODE step-by-step to extract temporal features.
+*   **Layer 1 (LNN-LTC)**: `ltc_cell.py`
+    *   The signal passes through `BiologicalLTCCell`.
+    *   It solves the biophysical ODE step-by-step to extract temporal features.
 *   **Layer 2 (Attention)**: `attention.py`
     *   Adds **Positional Encoding** (so the model knows time order).
     *   Applies **Self-Attention** to weigh the importance of different signal parts.
-*   **Layer 3 (Classifier)**: `la_nn.py` (Class `LANN`)
+*   **Layer 3 (Classifier)**: `la_nn.py` (Class `BioLANN`)
     *   Aggregates features and outputs 5 probabilities.
 
 ### Phase 3: Real-Time Engine (`src/api`)
