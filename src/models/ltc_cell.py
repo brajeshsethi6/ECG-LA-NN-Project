@@ -62,7 +62,6 @@ class BiologicalLTCCell(nn.Module):
         sensory_den = torch.sum(sensory_w_act, dim=1)
 
         # cm_t incorporates the time step relative to ODE unfoldings
-        # Ref: LTC Paper / NCPS source
         cm_t = F.softplus(self.cm) / (dt / self.ode_steps)
         gleak = F.softplus(self.gleak)
 

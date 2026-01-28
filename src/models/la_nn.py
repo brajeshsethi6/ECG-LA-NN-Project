@@ -21,7 +21,6 @@ class BioLANN(nn.Module):
         self.mixed_memory = mixed_memory
         
         # 1. Mixed Memory Component (LSTM-based)
-        # NCPS uses this to handle long-term gradients while the LTC 
         # handles the dynamic short-term temporal features.
         if self.mixed_memory:
             self.lstm = nn.LSTMCell(input_dim, hidden_dim)

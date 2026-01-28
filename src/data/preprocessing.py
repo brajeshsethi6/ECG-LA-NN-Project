@@ -34,14 +34,6 @@ class ECGDataset(Dataset):
     def __getitem__(self, idx):
         return self.signals[idx], self.labels[idx]
 
-def generate_mock_data(num_samples=1000, seq_len=180, input_dim=1, num_classes=5):
-    """
-    Generates random mock data for testing the pipeline.
-    """
-    signals = np.random.randn(num_samples, seq_len, input_dim).astype(np.float32)
-    labels = np.random.randint(0, num_classes, size=(num_samples,))
-    return signals, labels
-
 def normalize_signal(signal):
     """Z-score normalization."""
     mean = np.mean(signal)
