@@ -117,9 +117,18 @@ def load_model():
         num_heads=Config.NUM_ATTENTION_HEADS,
         dropout=Config.DROPOUT
     )
+    # Try loading best model first, then fall back to epoch checkpoint
     model_path = os.path.join(Config.MODELS_DIR, 'la_nn_best.pth')
+    if not os.path.exists(model_path):
+        model_path = os.path.join(Config.MODELS_DIR, 'la_nn_epoch_10.pth')
+        
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path, map_location=Config.DEVICE))
+        checkpoint = torch.load(model_path, map_location=Config.DEVICE)
+        # Handle both full checkpoints and state_dict only files
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint)
     return model.to(Config.DEVICE).eval()
 
 # Execute loading
@@ -130,6 +139,7 @@ if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.running = False
     st.session_state.history = []
+    st.session_state.gt_history = []
     st.session_state.ecg_buffer = []
     st.session_state.full_session_buffer = [] # Store all samples for download
     st.session_state.anomalies = [] # Store abnormal segments
@@ -232,19 +242,36 @@ with st.sidebar:
     if col_btn1.button("START", width='stretch', type="primary"):
         st.session_state.running = True
         st.session_state.history = []
+        st.session_state.gt_history = []
         st.session_state.ecg_buffer = []
         st.session_state.full_session_buffer = []
         st.session_state.anomalies = []
         st.session_state.anomaly_indices = []
-        
     if col_btn2.button("STOP", width='stretch'):
         st.session_state.running = False
         st.session_state.report_ready = True
+        
+        # Calculate session accuracy if GT was present
+        if hasattr(st.session_state, 'gt_history') and st.session_state.gt_history:
+            preds = [x['p'] for x in st.session_state.gt_history]
+            gts = [x['g'] for x in st.session_state.gt_history]
+            correct = sum(1 for p, g in zip(preds, gts) if p == g)
+            st.session_state.session_accuracy = correct / len(gts)
+        else:
+            st.session_state.session_accuracy = None
 
     st.markdown("---")
     
     # --- Report Export Feature ---
     if not st.session_state.running and hasattr(st.session_state, 'report_ready') and len(st.session_state.full_session_buffer) > 0:
+        if st.session_state.get('session_accuracy') is not None:
+            st.metric("Database Validation Accuracy", f"{st.session_state.session_accuracy:.2%}")
+            # If accuracy is low, show warning
+            if st.session_state.session_accuracy < 0.7:
+                 st.warning("⚠️ Model performance on this record is below clinical threshold.")
+            else:
+                 st.success("✅ Model validated against database ground truth.")
+
         st.markdown("### 📋 Final Results")
         
         # Professional HTML Report Generation
@@ -421,6 +448,7 @@ with st.sidebar:
                 )
                 
                 html_plot = fig_a.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
+                gt_line = f" | <b>Ground Truth:</b> {a['gt']}" if a.get('gt') else ""
                 items += f"""
                 <div class="event-card">
                     <div class="event-header">
@@ -431,7 +459,7 @@ with st.sidebar:
                         {html_plot}
                     </div>
                     <div style="padding: 10px; font-size: 11px; color: #666; background: #fffcfc; border-top: 1px solid #fee;">
-                        <b>Detection Confidence:</b> <span style="color:{'#e74c3c' if a['conf'] > 0.8 else '#d35400'}">{a['conf']:.2%}</span> | 
+                        <b>Detection Confidence:</b> <span style="color:{'#e74c3c' if a['conf'] > 0.8 else '#d35400'}">{a['conf']:.2%}</span>{gt_line} | 
                         <b>Timestamp:</b> {a['time']}
                     </div>
                 </div>
@@ -542,6 +570,7 @@ if st.session_state.running:
                             "time": datetime.now().strftime("%H:%M:%S"),
                             "offset_sec": total_samples_so_far / FS,
                             "type": prediction_result['prediction'],
+                            "gt": prediction_result['ground_truth'],
                             "conf": prediction_result['confidence'],
                             "data": anomaly_segment.tolist()
                         })
@@ -550,6 +579,13 @@ if st.session_state.running:
                         # Keep only last 50 anomalies to capture a full record's worth of data
                         if len(st.session_state.anomalies) > 50:
                             st.session_state.anomalies.pop(0)
+
+                    # Store for accuracy summary
+                    if prediction_result['ground_truth']:
+                        st.session_state.gt_history.append({
+                            'p': prediction_result['prediction'],
+                            'g': prediction_result['ground_truth']
+                        })
                     else:
                         trace_color = "#00f2ff" # Reset to Cyan for Normal
                     
@@ -598,8 +634,18 @@ if st.session_state.running:
                 
             # Log history
             ts = datetime.now().strftime("%H:%M:%S")
-            log_entry = f"[{ts}] {pred} detected (Conf: {prediction_result['confidence']:.2%})"
-            st.session_state.history.insert(0, log_entry)
+            gt = prediction_result['ground_truth']
+            msg = f"[{ts}] PRE: {pred}"
+            if gt:
+                msg += f" | GT: {gt}"
+                if pred == gt:
+                    msg += " ✅"
+                else:
+                    msg += " ❌"
+            else:
+                msg += f" (Conf: {prediction_result['confidence']:.2%})"
+                
+            st.session_state.history.insert(0, msg)
             
             # Confidence bars
             with conf_placeholder.container():
@@ -706,7 +752,8 @@ if st.session_state.anomalies:
             if idx < num_anomalies:
                 anomaly = st.session_state.anomalies[idx]
                 with cols[j]:
-                    st.markdown(f"**{anomaly['type']} Class** ({idx+1}) | {anomaly['time']}")
+                    gt_display = f" | GT: {anomaly['gt']}" if anomaly.get('gt') else ""
+                    st.markdown(f"**{anomaly['type']} Class**{gt_display} ({idx+1}) | {anomaly['time']}")
                     
                     # Enhanced segment plot with standard grid
                     fs = 360

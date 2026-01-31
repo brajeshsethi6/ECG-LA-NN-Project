@@ -30,9 +30,16 @@ class ECGStreamEngine:
             try:
                 annotation = wfdb.rdann(os.path.join(self.db_dir, self.record_name), 'atr')
                 self.ann_samples = set(annotation.sample)
+                # Store ground truth mapping
+                from src.data.preprocessing import AAMI_MAPPING
+                self.gt_mapping = {
+                    samp: sym for samp, sym in zip(annotation.sample, annotation.symbol) 
+                    if sym in AAMI_MAPPING
+                }
             except Exception:
                 # If no annotation found, detect peaks automatically
                 self.ann_samples = self._detect_peaks(self.signal)
+                self.gt_mapping = {}
         
         self.current_idx = 0
         self.window_size = Config.WINDOW_SIZE
@@ -103,8 +110,18 @@ class ECGStreamEngine:
             pred_idx = np.argmax(probs)
             
         # 4. Result dict
+        # Get ground truth if available
+        from src.data.preprocessing import AAMI_MAPPING
+        gt_symbol = self.gt_mapping.get(r_peak_idx, None)
+        gt_class = None
+        if gt_symbol:
+            # Map MIT-BIH symbols to AAMI class names
+            inv_map = {0: 'N', 1: 'S', 2: 'V', 3: 'F', 4: 'Q'}
+            gt_class = inv_map.get(AAMI_MAPPING[gt_symbol])
+
         result = {
             "prediction": self.classes[pred_idx],
+            "ground_truth": gt_class,
             "confidence": float(probs[pred_idx]),
             "probabilities": {self.classes[i]: float(probs[i]) for i in range(len(self.classes))},
             "alert_level": self.get_alert_level(probs)
