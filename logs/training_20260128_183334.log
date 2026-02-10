@@ -1,0 +1,12 @@
+[2026-01-28 18:33:41] Training started at 20260128_183334
+[2026-01-28 18:33:42] Device: cpu
+[2026-01-28 18:33:42] Log file: D:\M.Tech_BITS\Semester 4\Code\Lann\LA-NN-Project\src\..\logs\training_20260128_183334.log
+[2026-01-28 18:33:43] Metrics file: D:\M.Tech_BITS\Semester 4\Code\Lann\LA-NN-Project\src\..\logs\metrics_20260128_183334.csv
+[2026-01-28 18:33:45] Class weights: [  1.  30.  15. 100.  15.]
+[2026-01-28 18:34:04] Starting training on cpu...
+[2026-01-28 18:34:04] Total epochs: 30
+[2026-01-28 18:34:04] Batch size: 64
+[2026-01-28 18:34:04] Learning rate: 0.0015
+[2026-01-28 18:34:04] Training samples: 75082
+[2026-01-28 18:34:04] Validation samples: 16089
+[2026-01-28 18:34:04] ============================================================
