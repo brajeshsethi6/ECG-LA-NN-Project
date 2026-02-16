@@ -17,9 +17,19 @@ class ECGStreamEngine:
         self.record_name = record_name
         self.db_dir = os.path.join(Config.DATA_DIR, 'mitdb')
         
+        # AAMI Mapping for ground truth
+        self.AAMI_MAPPING = {
+            'N': 'N', 'L': 'N', 'R': 'N', 'e': 'N', 'j': 'N',  # Normal
+            'A': 'S', 'a': 'S', 'J': 'S', 'S': 'S',            # Supraventricular
+            'V': 'V', 'E': 'V',                                # Ventricular
+            'F': 'F',                                          # Fusion
+            '/': 'Q', 'f': 'Q', 'Q': 'Q'                       # Unknown/Paced
+        }
+        
         if custom_signal is not None:
             self.signal = custom_signal
             self.ann_samples = self._detect_peaks(self.signal)
+            self.ground_truth = {}  # No ground truth for custom signals
             self.record_name = "Uploaded CSV"
         else:
             # Load record
@@ -30,9 +40,30 @@ class ECGStreamEngine:
             try:
                 annotation = wfdb.rdann(os.path.join(self.db_dir, self.record_name), 'atr')
                 self.ann_samples = set(annotation.sample)
+<<<<<<< HEAD
+                # Store ground truth mapping
+                from src.data.preprocessing import AAMI_MAPPING
+                self.gt_mapping = {
+                    samp: sym for samp, sym in zip(annotation.sample, annotation.symbol) 
+                    if sym in AAMI_MAPPING
+                }
             except Exception:
                 # If no annotation found, detect peaks automatically
                 self.ann_samples = self._detect_peaks(self.signal)
+                self.gt_mapping = {}
+=======
+                
+                # Store ground truth mapping: sample_index -> AAMI class
+                self.ground_truth = {}
+                for idx, sample in enumerate(annotation.sample):
+                    symbol = annotation.symbol[idx]
+                    if symbol in self.AAMI_MAPPING:
+                        self.ground_truth[sample] = self.AAMI_MAPPING[symbol]
+            except Exception:
+                # If no annotation found, detect peaks automatically
+                self.ann_samples = self._detect_peaks(self.signal)
+                self.ground_truth = {}
+>>>>>>> d8744a7 (feat: Enhance accuracy tracking and performance display in ECG monitoring app)
         
         self.current_idx = 0
         self.window_size = Config.WINDOW_SIZE
@@ -101,13 +132,32 @@ class ECGStreamEngine:
             outputs, _ = self.model(x)
             probs = F.softmax(outputs, dim=1).cpu().numpy()[0]
             pred_idx = np.argmax(probs)
+        
+        # 4. Get ground truth if available
+        ground_truth_label = self.ground_truth.get(r_peak_idx, None)
             
+<<<<<<< HEAD
         # 4. Result dict
+        # Get ground truth if available
+        from src.data.preprocessing import AAMI_MAPPING
+        gt_symbol = self.gt_mapping.get(r_peak_idx, None)
+        gt_class = None
+        if gt_symbol:
+            # Map MIT-BIH symbols to AAMI class names
+            inv_map = {0: 'N', 1: 'S', 2: 'V', 3: 'F', 4: 'Q'}
+            gt_class = inv_map.get(AAMI_MAPPING[gt_symbol])
+
+=======
+        # 5. Result dict
+>>>>>>> d8744a7 (feat: Enhance accuracy tracking and performance display in ECG monitoring app)
         result = {
             "prediction": self.classes[pred_idx],
+            "ground_truth": gt_class,
             "confidence": float(probs[pred_idx]),
             "probabilities": {self.classes[i]: float(probs[i]) for i in range(len(self.classes))},
-            "alert_level": self.get_alert_level(probs)
+            "alert_level": self.get_alert_level(probs),
+            "ground_truth": ground_truth_label,
+            "is_correct": ground_truth_label == self.classes[pred_idx] if ground_truth_label else None
         }
         return result
 

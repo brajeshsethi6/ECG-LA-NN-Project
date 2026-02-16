@@ -14,7 +14,8 @@ LA-NN-Project/
 │   ├── models/            # Neural Network Modules
 │   │   ├── ltc_cell.py    # Biological Liquid Time-Constant (LTC) Cells
 │   │   ├── attention.py   # Multi-Head Attention & Positional Encoding
-│   │   └── la_nn.py       # Main LA-NN Assembly
+│   │   ├── la_nn.py       # Main LA-NN Assembly
+│   │   └── baselines.py   # Baseline models (CNN, LSTM, Transformer, LNN)
 │   ├── data/              # Data Pipeline
 │   │   └── preprocessing.py # Mock Data Generator & WFDB Integration Logic
 │   ├── training/          # Training Loop
@@ -22,6 +23,7 @@ LA-NN-Project/
 │   └── evaluation/        # Validation & Metrics
 │       └── metrics.py     # Classification metrics & Clinical Decision Logic
 ├── main.py                # Entry point
+├── train_baselines.py     # Script to train and compare baseline models
 └── requirements.txt       # Dependencies
 ```
 
@@ -37,11 +39,18 @@ LA-NN-Project/
    pip install -r requirements.txt
    ```
 
-2. **Run Training (Simulation):**
+2. **Run Main LA-NN Training:**
    ```bash
    python main.py
    ```
-   *Note: Currently runs with mock data. To use real data, update `src/data/preprocessing.py` to point to your MIT-BIH dataset path.*
+
+3. **Run Baselines Comparison:**
+   ```bash
+   python train_baselines.py
+   ```
+   This will train and evaluate CNN1D, LSTM, Transformer, and LNN (without attention) to justify the performance gains of LA-NN.
+
+*Note: Currently runs with mock data. To use real data, update `src/data/preprocessing.py` to point to your MIT-BIH dataset path.*
 
 ## Architecture Details
 - **LNN Encoder:** 2 Layers, Hidden Dim=48, ODE Steps=3.
