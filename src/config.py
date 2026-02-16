@@ -30,7 +30,7 @@ class Config:
     BATCH_SIZE = 64
     LEARNING_RATE = 15e-4
     WEIGHT_DECAY = 1e-4
-    NUM_EPOCHS = 30  # Increased from 1 to 30 for better learning
+    NUM_EPOCHS = 10  # Increased from 1 to 30 for better learning
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     # Clinical Thresholds (for Decision Logic)
