@@ -276,39 +276,49 @@ with st.sidebar:
                 ))
 
             fig_full.update_layout(
-                title="Full Continuous ECG Record with Critical Markers",
+                title=dict(
+                    text="Full Continuous ECG Record with Critical Markers",
+                    x=0.5,
+                    font=dict(size=20, color='#2c3e50')
+                ),
                 xaxis_title="Time (seconds)",
                 yaxis_title="Amplitude (mV)",
-                height=400,
-                xaxis=dict(showgrid=True, gridcolor='#ecf0f1'),
-                yaxis=dict(showgrid=True, gridcolor='#ecf0f1'),
-                template="plotly_white"
+                height=500,
+                plot_bgcolor='rgb(255, 250, 250)',
+                paper_bgcolor='rgba(255, 255, 255, 0)',
+                margin=dict(l=60, r=40, t=80, b=60),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
-            full_plot_html = fig_full.to_html(include_plotlyjs='cdn', full_html=False)
             
-            # Anomaly Grid for Report (Enhanced Grid)
-            anom_html = ""
-            for i, a in enumerate(st.session_state.anomalies):
-                fig_a = go.Figure()
-                fig_a.add_trace(go.Scatter(y=a['data'], line=dict(color='#e74c3c', width=2)))
-                fig_a.update_layout(
-                    height=200, 
-                    margin=dict(l=0,r=0,t=20,b=0), 
-                    xaxis_visible=False, 
-                    yaxis_visible=True,
-                    title=dict(text=f"Event #{i+1}: {a['type']}", font=dict(size=12))
-                )
-                plot_a = fig_a.to_html(include_plotlyjs='cdn', full_html=False)
-                anom_html += f"""
-                <div style='border: 2px solid #e74c3c; padding: 15px; margin: 10px; border-radius: 8px; background: #fffcfc;'>
-                    <div style='display:flex; justify-content:between; font-size: 12px; margin-bottom:10px;'>
-                        <b style='color:#c0392b;'>CRITICAL POINT #{i+1}</b>
-                        <span style='margin-left:auto;'>Time Offset: {a['offset_sec']:.2f}s | Real Time: {a['time']}</span>
-                    </div>
-                    {plot_a}
-                    <div style='font-size: 11px; margin-top:5px; color:#555;'>Classification: {a['type']} | Confidence: {a['conf']:.2%}</div>
-                </div>
-                """
+            # Standard ECG Grid: Minor (0.04s/0.1mV), Major (0.2s/0.5mV)
+            fig_full.update_xaxes(
+                showgrid=True,
+                dtick=0.2,
+                gridcolor='rgba(231, 76, 60, 0.4)',
+                gridwidth=1.5,
+                minor=dict(dtick=0.04, showgrid=True, gridcolor='rgba(231, 76, 60, 0.15)', gridwidth=0.5),
+                zeroline=True,
+                zerolinecolor='rgba(231, 76, 60, 0.6)',
+                zerolinewidth=2
+            )
+            fig_full.update_yaxes(
+                showgrid=True,
+                dtick=0.5,
+                gridcolor='rgba(231, 76, 60, 0.4)',
+                gridwidth=1.5,
+                minor=dict(dtick=0.1, showgrid=True, gridcolor='rgba(231, 76, 60, 0.15)', gridwidth=0.5),
+                zeroline=True,
+                zerolinecolor='rgba(231, 76, 60, 0.6)',
+                zerolinewidth=2,
+                range=[-2, 3] # Fixed scale for standard visual comparison
+            )
+            
+            full_plot_html = fig_full.to_html(
+                include_plotlyjs='cdn', 
+                full_html=False, 
+                config={'responsive': True, 'displayModeBar': True}
+            )
+            
             
             html = f"""
             <html>
@@ -319,19 +329,15 @@ with st.sidebar:
                         .header {{ background: #fff; border: 1px solid #dce4ec; border-radius: 10px; padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }}
                         h1 {{ color: #1a2a3a; margin: 0; font-size: 28px; letter-spacing: 1px; }}
                         
-                        /* ECG Paper Background Effect */
+                        /* Professional ECG Paper Styling */
                         .ecg-paper {{
                             background-color: #fff;
-                            background-image: 
-                                linear-gradient(to right, rgba(231, 76, 60, 0.1) 1px, transparent 1px),
-                                linear-gradient(to bottom, rgba(231, 76, 60, 0.1) 1px, transparent 1px),
-                                linear-gradient(to right, rgba(231, 76, 60, 0.3) 1px, transparent 1px),
-                                linear-gradient(to bottom, rgba(231, 76, 60, 0.3) 1px, transparent 1px);
-                            background-size: 5px 5px, 5px 5px, 25px 25px, 25px 25px;
-                            border: 1px solid #e74c3c;
-                            border-radius: 5px;
-                            padding: 10px;
+                            border: 3px solid #e74c3c;
+                            border-radius: 8px;
+                            padding: 2px;
                             position: relative;
+                            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.15);
+                            overflow: hidden;
                         }}
                         
                         .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }}
@@ -368,30 +374,58 @@ with st.sidebar:
             return html
             
         def self_building_grid():
+            fs = 360
             items = ""
             for i, a in enumerate(st.session_state.anomalies):
+                # Time index for the segment
+                t_a = np.arange(len(a['data'])) / fs
+                
                 fig_a = go.Figure()
-                fig_a.add_trace(go.Scatter(y=a['data'], line=dict(color='#000', width=2)))
+                fig_a.add_trace(go.Scatter(
+                    x=t_a, 
+                    y=a['data'], 
+                    line=dict(color='#000', width=2),
+                    name='ECG segment'
+                ))
+                
                 fig_a.update_layout(
-                    height=200, 
-                    margin=dict(l=0,r=0,t=0,b=0), 
-                    xaxis_visible=False, 
-                    yaxis_visible=True,
+                    height=280, 
+                    margin=dict(l=40, r=20, t=10, b=40), 
+                    plot_bgcolor='rgb(255, 250, 250)',
                     paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
+                    showlegend=False
                 )
-                html_plot = fig_a.to_html(include_plotlyjs='cdn', full_html=False)
+                
+                # Apply standard ECG grid to anomaly snippets too
+                fig_a.update_xaxes(
+                    showgrid=True,
+                    dtick=0.2,
+                    gridcolor='rgba(231, 76, 60, 0.3)',
+                    minor=dict(dtick=0.04, showgrid=True, gridcolor='rgba(231, 76, 60, 0.1)'),
+                    title="Time (s)"
+                )
+                fig_a.update_yaxes(
+                    showgrid=True,
+                    dtick=0.5,
+                    gridcolor='rgba(231, 76, 60, 0.3)',
+                    minor=dict(dtick=0.1, showgrid=True, gridcolor='rgba(231, 76, 60, 0.1)'),
+                    range=[-1.5, 2.5],
+                    title="mV"
+                )
+                
+                html_plot = fig_a.to_html(include_plotlyjs='cdn', full_html=False, config={'displayModeBar': False})
                 items += f"""
                 <div class="event-card">
                     <div class="event-header">
                         <span>CRITICAL EVENT #{i+1} [{a['type']}]</span>
-                        <span>{a['offset_sec']:.2f}s</span>
+                        <span>Offset: {a['offset_sec']:.2f}s</span>
                     </div>
-                    <div class="ecg-paper" style="border:none; border-radius:0;">
+                    <div class="ecg-paper" style="border:none; border-radius:0; box-shadow:none;">
                         {html_plot}
                     </div>
-                    <div style="padding: 10px; font-size: 11px; color: #666;">
-                        Detection Confidence: <b>{a['conf']:.2%}</b> | Captured at local time: {a['time']}
+                    <div style="padding: 10px; font-size: 11px; color: #666; background: #fffcfc; border-top: 1px solid #fee;">
+                        <b>Detection Confidence:</b> <span style="color:{'#e74c3c' if a['conf'] > 0.8 else '#d35400'}">{a['conf']:.2%}</span> | 
+                        <b>Timestamp:</b> {a['time']}
                     </div>
                 </div>
                 """
@@ -607,19 +641,36 @@ if st.session_state.running:
         # 4. Full Session Cumulative Plot
         if len(st.session_state.full_session_buffer) > 0:
             fig_full = go.Figure()
+            fs = 360
+            full_time = np.arange(len(st.session_state.full_session_buffer)) / fs
             fig_full.add_trace(go.Scatter(
+                x=full_time,
                 y=st.session_state.full_session_buffer,
                 mode='lines',
-                line=dict(color='#8888aa', width=1),
-                name='Cumulative Session'
+                line=dict(color='#2c3e50', width=1),
+                name='Full Session Record'
             ))
+            
+            # Professional clinical grid for main UI
             fig_full.update_layout(
-                height=200,
-                margin=dict(l=0, r=0, t=0, b=0),
+                height=250,
+                margin=dict(l=40, r=20, t=10, b=40),
                 paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(255,255,255,0.02)',
-                xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=False, range=[-2, 3])
+                plot_bgcolor='rgb(255, 250, 250)',
+                xaxis=dict(
+                    title="Time (s)", 
+                    dtick=1.0, 
+                    showgrid=True, 
+                    gridcolor='rgba(231,76,60,0.2)',
+                    minor=dict(dtick=0.2, showgrid=True, gridcolor='rgba(231,76,60,0.05)')
+                ),
+                yaxis=dict(
+                    title="mV", 
+                    range=[-2, 3], 
+                    showgrid=True, 
+                    gridcolor='rgba(231,76,60,0.2)',
+                    minor=dict(dtick=0.5, showgrid=True, gridcolor='rgba(231,76,60,0.05)')
+                )
             )
             full_plot_placeholder.plotly_chart(fig_full, width='stretch', config={'displayModeBar': True})
             
@@ -649,14 +700,34 @@ if st.session_state.anomalies:
                 anomaly = st.session_state.anomalies[idx]
                 with cols[j]:
                     st.markdown(f"**{anomaly['type']} Class** ({idx+1}) | {anomaly['time']}")
-                    fig_anom = px.line(anomaly['data'], height=150)
+                    
+                    # Enhanced segment plot with standard grid
+                    fs = 360
+                    t_anom = np.arange(len(anomaly['data'])) / fs
+                    fig_anom = go.Figure()
+                    fig_anom.add_trace(go.Scatter(
+                        x=t_anom, 
+                        y=anomaly['data'], 
+                        line=dict(color='#ff3e3e', width=2),
+                        name=anomaly['type']
+                    ))
+                    
                     fig_anom.update_layout(
-                        margin=dict(l=0, r=0, t=0, b=0),
-                        paper_bgcolor='rgba(255,0,0,0.05)',
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        xaxis_visible=False,
-                        yaxis_visible=False
+                        height=180,
+                        margin=dict(l=30, r=10, t=10, b=30),
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgb(255, 250, 250)',
+                        showlegend=False
                     )
-                    fig_anom.update_traces(line_color='#ff3e3e')
+                    fig_anom.update_xaxes(
+                        showgrid=True, dtick=0.2, 
+                        gridcolor='rgba(231,76,60,0.1)', 
+                        title=dict(text="s", font=dict(size=10))
+                    )
+                    fig_anom.update_yaxes(
+                        showgrid=True, dtick=0.5, 
+                        gridcolor='rgba(231,76,60,0.1)',
+                        range=[-1.5, 2.5]
+                    )
                     st.plotly_chart(fig_anom, width='stretch', key=f"anom_{idx}")
                     st.caption(f"Confidence: {anomaly['conf']:.2%}")
